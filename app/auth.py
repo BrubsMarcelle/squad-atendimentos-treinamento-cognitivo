@@ -16,8 +16,11 @@ pwd_context = CryptContext(
     bcrypt__rounds=12  # Reduzido de 12 para 10 rounds para melhor performance
 )
 
-# Esquema OAuth2
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+# Esquema OAuth2 - URL corrigida para o Swagger
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/token",  # Usando endpoint /token para OAuth2 form data
+    scheme_name="JWT"
+)
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

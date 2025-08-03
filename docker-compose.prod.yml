@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Aplicação FastAPI para Produção
+  fastapi-app:
+    build: .
+    container_name: squad-treinamento-api-prod
+    ports:
+      - "8002:8002"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DATABASE_NAME=${DATABASE_NAME}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    depends_on:
+      - mongodb
+    restart: always
+    networks:
+      - squad-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MongoDB para Produção
+  mongodb:
+    image: mongo:7.0
+    container_name: squad-mongodb-prod
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${DATABASE_NAME}
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+      - ./backups:/backups  # Para backups automáticos
+    restart: always
+    networks:
+      - squad-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    command: mongod --auth
+
+  # Nginx como Reverse Proxy (Opcional para produção)
+  nginx:
+    image: nginx:alpine
+    container_name: squad-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl  # Certificados SSL
+    depends_on:
+      - fastapi-app
+    restart: always
+    networks:
+      - squad-network
+    profiles:
+      - proxy
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  squad-network:
+    driver: bridge

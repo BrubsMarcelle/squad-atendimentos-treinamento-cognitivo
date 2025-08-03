@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # Aplicação FastAPI
+  fastapi-app:
+    build: .
+    container_name: squad-treinamento-api
+    ports:
+      - "8002:8002"
+    environment:
+      - MONGO_URL=${MONGO_URL}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - squad-network
+    volumes:
+      - ./logs:/app/logs  # Para logs da aplicação (se houver)
+
+  # MongoDB
+  mongodb:
+    image: mongo:7.0
+    container_name: squad-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d  # Scripts de inicialização
+    restart: unless-stopped
+    networks:
+      - squad-network
+
+  # MongoDB Express (Interface web para desenvolvimento)
+  mongo-express:
+    image: mongo-express:1.0.0-alpha
+    container_name: squad-mongo-express
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - squad-network
+    profiles:
+      - development  # Só será executado com profile development
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  squad-network:
+    driver: bridge

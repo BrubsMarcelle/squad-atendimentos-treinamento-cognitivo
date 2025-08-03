@@ -1,68 +1,57 @@
-from datetime import datetime, timedelta, timezone
-from app.db.database import user_collection, checkin_collection, ranking_collection
+"""
+Legacy service layer - Mantido para compatibilidade.
+NOVO: Use CheckinService para nova funcionalidade.
+"""
+from app.services.checkin_service import CheckinService
 
-# Timezone de São Paulo: UTC-3 (Brasil aboliu horário de verão em 2019)
-# Solução robusta que funciona em qualquer sistema
-SAO_PAULO_TZ = timezone(timedelta(hours=-3))
 
+# Mantido para compatibilidade com código existente
 async def process_user_checkin(user: dict):
+    """
+    Wrapper para manter compatibilidade com código antigo.
+    DEPRECATED: Use CheckinService.process_checkin() diretamente.
+    """
+    return await CheckinService.process_checkin(user)
 
-    now_in_sao_paulo = datetime.now(SAO_PAULO_TZ)
-    today = now_in_sao_paulo.date()
 
-    username = user["username"]
-    user_id = user["_id"]
-
-    if today.weekday() > 6:
-        return {"message": "Check-ins são permitidos apenas de Segunda a Sexta."}
-
-    # Com zoneinfo, criamos datetime já com timezone
-    start_of_day = datetime.combine(today, datetime.min.time()).replace(tzinfo=SAO_PAULO_TZ)
+async def fix_data_inconsistencies():
+    """
+    Força a correção de inconsistências de dados quando chamada manualmente
+    """
+    from app.db.database import fix_username_inconsistencies
     
-    if await checkin_collection.find_one({"user_id": user_id, "timestamp": {"$gte": start_of_day}}):
-        return {"message": f"Usuário {username} já realizou o check-in hoje."}
-
-    points_awarded = 0
-    if not await checkin_collection.find_one({"timestamp": {"$gte": start_of_day}}):
-        points_awarded = 10
-    else:
-        points_awarded = 5
+    print(f"\n🔧 CORREÇÃO MANUAL DE INCONSISTÊNCIAS:")
+    
+    try:
+        # Corrigir inconsistências de username
+        fix_result = await fix_username_inconsistencies()
         
-    week_id = f"{today.year}-W{today.isocalendar()[1]}"
-    user_ranking = await ranking_collection.find_one({"user_id": user_id, "week_id": week_id})
-
-    if user_ranking:
-        last_checkin_db = user_ranking["last_checkin_date"]
-        last_checkin_date = datetime.strptime(last_checkin_db, "%Y-%m-%d").date() if isinstance(last_checkin_db, str) else last_checkin_db
-
-        expected_previous_day = today - timedelta(days=1)
-        if today.weekday() == 0:
-            expected_previous_day = today - timedelta(days=3)
+        # Estatísticas adicionais
+        from app.db.database import user_collection, checkin_collection, ranking_collection
         
-        if last_checkin_date == expected_previous_day:
-            points_awarded += 2
-
-    await checkin_collection.insert_one({
-        "user_id": user_id,
-        "username": username,
-        "timestamp": now_in_sao_paulo 
-    })
-
-    await ranking_collection.update_one(
-        {"user_id": user_id, "week_id": week_id},
-        {
-            "$inc": {"points": points_awarded},
-            "$set": {
-                "last_checkin_date": today.strftime("%Y-%m-%d"),
-                "username": username,
-                "updated_at": now_in_sao_paulo
+        users_count = await user_collection.count_documents({})
+        checkins_count = await checkin_collection.count_documents({})
+        rankings_count = await ranking_collection.count_documents({})
+        
+        result = {
+            "status": "completed",
+            "fixes_applied": fix_result,
+            "statistics": {
+                "total_users": users_count,
+                "total_checkins": checkins_count,
+                "total_rankings": rankings_count
             }
-        },
-        upsert=True
-    )
+        }
+        
+        print(f"   ✅ Correção concluída!")
+        print(f"   📊 Estatísticas: {result['statistics']}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"   ❌ Erro na correção: {e}")
+        raise Exception(f"Fix data inconsistencies failed: {str(e)}")
 
-    return {
-        "message": "Check-in realizado com sucesso!",
-        "username": username,
-        "points_awarded": points_awarded
-    }
+
+# Para compatibilidade - mantém importação do timezone
+from app.utils.constants import SAO_PAULO_TZ

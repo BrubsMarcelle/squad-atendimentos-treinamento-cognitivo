@@ -61,9 +61,7 @@ def create_test_user():
     """Cria um usuário de teste se não existir"""
     test_user = {
         "username": "perftest",
-        "password": "testpass123",
-        "full_name": "Performance Test User",
-        "email": "perftest@example.com"
+        "password": "testpass123"
     }
     
     try:

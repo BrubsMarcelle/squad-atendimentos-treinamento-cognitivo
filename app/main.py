@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 from app.routers import checkin_router, ranking_router, user_router
 from app.db.database import user_collection, checkin_collection, ranking_collection
 from pymongo import ASCENDING
@@ -10,7 +11,12 @@ app = FastAPI(
     contact={"brubsmarcelle2022@gmail.com": "Brubs Marcelle"},
     description="API para gamificação de check-ins diários com ranking semanal.",
     docs_url="/swagger",
-    redoc_url=None
+    redoc_url=None,
+    # Configuração OAuth2 para Swagger
+    swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
+    swagger_ui_init_oauth={
+        "usePkceWithAuthorizationCodeGrant": True,
+    }
 )
 
 # Configuração CORS - Otimizada para autenticação
@@ -44,7 +50,7 @@ async def optimized_logging_middleware(request, call_next):
     import time
     
     # Apenas log detalhado para endpoints de auth
-    is_auth_endpoint = request.url.path in ["/login", "/users"]
+    is_auth_endpoint = request.url.path in ["/login", "/token", "/users"]
     
     if is_auth_endpoint:
         start_time = time.time()
@@ -73,9 +79,14 @@ async def optimized_logging_middleware(request, call_next):
         return await call_next(request)
 @app.on_event("startup")
 async def startup_db_client():
-    """Cria índices para otimizar performance das consultas"""
+    """Cria índices e verifica integridade do banco de dados no startup"""
     try:
-        # Índice único para username (otimiza buscas de login)
+        print("\n🚀 Iniciando configuração do banco de dados...")
+        
+        # Importar as funções de verificação
+        from app.db.database import check_database_health, fix_username_inconsistencies
+        
+        # Criar índices para otimizar performance das consultas
         await user_collection.create_index([("username", ASCENDING)], unique=True)
         print("✅ Índice de username criado com sucesso")
         
@@ -87,15 +98,83 @@ async def startup_db_client():
         await ranking_collection.create_index([("user_id", ASCENDING), ("week_id", ASCENDING)])
         print("✅ Índice de rankings criado com sucesso")
         
+        # Verificar saúde do banco
+        health = await check_database_health()
+        
+        # Corrigir inconsistências se houver dados
+        if health.get("users", 0) > 0:
+            await fix_username_inconsistencies()
+        
+        print("🎉 Banco de dados configurado e verificado com sucesso!\n")
+        
     except Exception as e:
-        print(f"⚠️ Aviso ao criar índices: {e}")
+        print(f"⚠️ Aviso durante configuração do banco: {e}")
+        # Não falhar o startup por causa de problemas de banco
+        pass
 
 app.include_router(user_router.router)
 app.include_router(checkin_router.router)
 app.include_router(ranking_router.router)
 
-@app.get("/", tags=["Root"])
-def read_root():
-    return {"status": "API online"}
 
+@app.get("/healthcheck", summary="Verificar saúde do sistema")
+async def healthcheck():
+    """
+    Endpoint para verificar a saúde do sistema e banco de dados.
+    
+    Returns:
+        dict: Status de saúde do sistema
+        
+    Raises:
+        HTTPException: Erro na verificação de saúde
+    """
+    from app.utils.logging import system_logger
+    from app.db.database import check_database_health
+    from datetime import datetime
+    from app.services.logic import SAO_PAULO_TZ
+    
+    system_logger.info("🏥 Verificando saúde do sistema")
+    
+    try:
+        # Verificar saúde do banco
+        db_health = await check_database_health()
+        
+        # Informações do sistema
+        current_time = datetime.now(SAO_PAULO_TZ)
+        today = current_time.date()
+        week_id = f"{today.year}-W{today.isocalendar()[1]}"
+        
+        health_data = {
+            "status": "healthy",
+            "timestamp": current_time.isoformat(),
+            "current_date": today.isoformat(),
+            "current_week": week_id,
+            "database": db_health,
+            "timezone": "America/Sao_Paulo (UTC-3)"
+        }
+        
+        system_logger.info(
+            "✅ Sistema saudável",
+            {"database_status": db_health.get("status", "unknown")}
+        )
+        
+        return health_data
+        
+    except Exception as e:
+        system_logger.error("Erro na verificação de saúde", error=e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Health check failed: {str(e)}"
+        )
+
+
+@app.get("/health", summary="Health check endpoint")
+async def health():
+    """
+    Endpoint de health check padrão para containers Docker.
+    
+    Returns:
+        dict: Status de saúde do sistema
+    """
+    return await healthcheck()
 

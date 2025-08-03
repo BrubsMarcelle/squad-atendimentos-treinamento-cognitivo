@@ -1,0 +1,44 @@
+# Ignorar arquivos de ambiente reais
+.env
+.env.local
+.env.production
+
+# Ignorar arquivos do Docker
+.dockerignore
+
+# Ignorar logs
+logs/
+*.log
+
+# Ignorar arquivos temporários
+temp/
+tmp/
+
+# Ignorar backups
+backups/
+*.backup
+
+# Ignorar arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Ignorar arquivos do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+
+# Ignorar arquivos do IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignorar certificados SSL
+ssl/
+*.pem
+*.key
+*.crt
