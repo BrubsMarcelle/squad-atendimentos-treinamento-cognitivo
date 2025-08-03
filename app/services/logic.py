@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-import pytz 
+import pytz  # Usando pytz que está instalado
 from app.db.database import user_collection, checkin_collection, ranking_collection
 
 SAO_PAULO_TZ = pytz.timezone("America/Sao_Paulo")

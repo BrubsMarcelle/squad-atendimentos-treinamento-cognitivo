@@ -32,20 +32,37 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
+    print(f"\n🔒 VERIFICANDO AUTENTICAÇÃO:")
+    print(f"   🎫 Token recebido: {token[:20]}..." if token else "   ❌ Nenhum token fornecido")
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
     try:
+        print(f"   🔍 Decodificando token JWT...")
         payload = jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
         username: str = payload.get("sub")
+        
         if username is None:
+            print(f"   ❌ Username não encontrado no token!")
             raise credentials_exception
-    except JWTError:
+            
+        print(f"   👤 Username extraído do token: {username}")
+        print(f"   ⏰ Token expira em: {payload.get('exp', 'N/A')}")
+        
+    except JWTError as e:
+        print(f"   ❌ Erro ao decodificar token: {type(e).__name__}: {str(e)}")
         raise credentials_exception
     
+    print(f"   🔍 Buscando usuário no banco de dados...")
     user = await user_collection.find_one({"username": username})
+    
     if user is None:
+        print(f"   ❌ Usuário '{username}' não encontrado no banco!")
         raise credentials_exception
+        
+    print(f"   ✅ Usuário autenticado com sucesso: {user.get('username', 'N/A')}")
     return user
