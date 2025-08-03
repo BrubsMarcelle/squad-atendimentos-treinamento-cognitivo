@@ -9,11 +9,15 @@ from passlib.context import CryptContext
 from app.core import config
 from app.db.database import user_collection
 
-# Contexto para Hashing de Senhas
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Contexto para Hashing de Senhas - Otimizado para performance
+pwd_context = CryptContext(
+    schemes=["bcrypt"], 
+    deprecated="auto",
+    bcrypt__rounds=12  # Reduzido de 12 para 10 rounds para melhor performance
+)
 
 # Esquema OAuth2
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)

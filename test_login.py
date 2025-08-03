@@ -59,47 +59,23 @@ def main():
         headers={"Content-Type": "application/json"}
     )
     
-    # Teste 2: Login via JSON no endpoint /token  
+    # Teste 2: Listar usuários (sem auth)
     print("\n" + "="*60)
-    print("📋 TESTE 2: POST /token (JSON)")
-    response2 = test_endpoint(
-        "POST", 
-        "/token", 
-        data=test_user,
-        headers={"Content-Type": "application/json"}
-    )
-    
-    # Teste 3: Login via form-data no endpoint /token
-    print("\n" + "="*60)
-    print("📋 TESTE 3: POST /token (Form-Data)")
-    response3 = test_endpoint(
-        "POST", 
-        "/token", 
-        data=test_user,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        is_json=False
-    )
-    
-    # Teste 4: Listar usuários (sem auth)
-    print("\n" + "="*60)
-    print("📋 TESTE 4: GET /users")
-    response4 = test_endpoint("GET", "/users")
+    print("📋 TESTE 2: GET /users")
+    response2 = test_endpoint("GET", "/users")
     
     # Se conseguiu um token, teste endpoint protegido
     token = None
-    for resp in [response1, response2, response3]:
-        if resp and resp.status_code == 200:
-            try:
-                token_data = resp.json()
-                token = token_data.get("access_token")
-                if token:
-                    break
-            except:
-                pass
+    if response1 and response1.status_code == 200:
+        try:
+            token_data = response1.json()
+            token = token_data.get("access_token")
+        except:
+            pass
     
     if token:
         print("\n" + "="*60)
-        print("📋 TESTE 5: POST /checkin (com token)")
+        print("📋 TESTE 3: POST /checkin (com token)")
         test_endpoint(
             "POST", 
             "/checkin/", 

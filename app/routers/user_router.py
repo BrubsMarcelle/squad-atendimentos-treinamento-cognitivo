@@ -1,8 +1,6 @@
 from datetime import timedelta
-from fastapi import APIRouter, HTTPException, Depends, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-import json
 
 from app.models.user import Token, UserCreate
 from app.db.database import user_collection
@@ -43,111 +41,58 @@ async def create_user(user: UserCreate):
     await user_collection.insert_one(user_dict)
     return {"message": "User created successfully"}
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(
-    request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends()
-):
-    """
-    Endpoint flexível que aceita tanto form-data quanto JSON
-    """
-    print(f"\n🔐 PROCESSANDO LOGIN:")
-    
-    username = None
-    password = None
-    login_method = None
-    
-    # Verificar o Content-Type da requisição
-    content_type = request.headers.get("content-type", "")
-    print(f"   📄 Content-Type detectado: {content_type}")
-    
-    if "application/json" in content_type:
-        # Se for JSON, ler o body diretamente
-        login_method = "JSON"
-        print(f"   🔄 Processando login via JSON...")
-        try:
-            body = await request.body()
-            json_data = json.loads(body)
-            username = json_data.get("username")
-            password = json_data.get("password")
-            print(f"   👤 Username extraído: {username}")
-            print(f"   🔑 Password fornecido: {'✅' if password else '❌'}")
-        except Exception as e:
-            print(f"   ❌ Erro ao processar JSON: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid JSON format"
-            )
-    else:
-        # Se for form-data, usar o OAuth2PasswordRequestForm
-        login_method = "FORM-DATA"
-        print(f"   🔄 Processando login via Form-Data...")
-        username = form_data.username
-        password = form_data.password
-        print(f"   👤 Username extraído: {username}")
-        print(f"   🔑 Password fornecido: {'✅' if password else '❌'}")
-    
-    if not username or not password:
-        print(f"   ❌ Campos obrigatórios ausentes!")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Username and password are required"
-        )
-    
-    print(f"   🔍 Buscando usuário no banco de dados...")
-    user = await user_collection.find_one({"username": username})
-    
-    if not user:
-        print(f"   ❌ Usuário '{username}' não encontrado!")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    print(f"   ✅ Usuário encontrado: {user.get('username', 'N/A')}")
-    print(f"   🔐 Verificando senha...")
-    
-    if not verify_password(password, user["password"]):
-        print(f"   ❌ Senha incorreta para usuário '{username}'!")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    print(f"   ✅ Senha verificada com sucesso!")
-    print(f"   🎫 Gerando token de acesso...")
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["username"]}, expires_delta=access_token_expires
-    )
-    
-    print(f"   ✅ Token gerado com sucesso!")
-    print(f"   ⏰ Expira em: {ACCESS_TOKEN_EXPIRE_MINUTES} minutos")
-    print(f"   🎉 LOGIN REALIZADO COM SUCESSO via {login_method}!")
-    
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@router.post("/login", response_model=Token, summary="Login com JSON")
+@router.post("/login", response_model=Token, summary="Login otimizado")
 async def login_with_json(login_data: LoginRequest):
     """
-    Endpoint de login que aceita dados JSON (para frontends modernos)
+    Endpoint de login otimizado que aceita dados JSON
     """
-    user = await user_collection.find_one({"username": login_data.username})
-    if not user or not verify_password(login_data.password, user["password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    import time
+    start_time = time.time()
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user["username"]}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    try:
+        # Busca otimizada com projeção para retornar apenas campos necessários
+        user = await user_collection.find_one(
+            {"username": login_data.username},
+            {"username": 1, "password": 1}  # Projeção para buscar apenas campos necessários
+        )
+        
+        if not user:
+            # Simula tempo de verificação de senha para evitar timing attacks
+            verify_password("dummy", "$2b$12$dummy.hash.to.prevent.timing.attacks")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Verificação de senha
+        if not verify_password(login_data.password, user["password"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Geração do token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user["username"]}, 
+            expires_delta=access_token_expires
+        )
+        
+        end_time = time.time()
+        print(f"✅ Login realizado em {(end_time - start_time):.3f}s para usuário: {user['username']}")
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro inesperado no login: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )
 
 @router.get("/users", response_model=list[UserResponse], summary="Listar todos os usuários")
 async def list_users():

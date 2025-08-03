@@ -1,8 +1,9 @@
-from datetime import datetime, timedelta
-import pytz  # Usando pytz que está instalado
+from datetime import datetime, timedelta, timezone
 from app.db.database import user_collection, checkin_collection, ranking_collection
 
-SAO_PAULO_TZ = pytz.timezone("America/Sao_Paulo")
+# Timezone de São Paulo: UTC-3 (Brasil aboliu horário de verão em 2019)
+# Solução robusta que funciona em qualquer sistema
+SAO_PAULO_TZ = timezone(timedelta(hours=-3))
 
 async def process_user_checkin(user: dict):
 
@@ -15,7 +16,8 @@ async def process_user_checkin(user: dict):
     if today.weekday() > 6:
         return {"message": "Check-ins são permitidos apenas de Segunda a Sexta."}
 
-    start_of_day = SAO_PAULO_TZ.localize(datetime.combine(today, datetime.min.time()))
+    # Com zoneinfo, criamos datetime já com timezone
+    start_of_day = datetime.combine(today, datetime.min.time()).replace(tzinfo=SAO_PAULO_TZ)
     
     if await checkin_collection.find_one({"user_id": user_id, "timestamp": {"$gte": start_of_day}}):
         return {"message": f"Usuário {username} já realizou o check-in hoje."}
